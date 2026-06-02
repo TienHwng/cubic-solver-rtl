@@ -1,10 +1,12 @@
 import math
 import struct
 import csv
+from pathlib import Path
 import numpy as np
 
 
 FP32_NAN = 0x7FC00000
+BASE_DIR = Path(__file__).resolve().parent
 
 
 def to_f32(x):
@@ -171,7 +173,15 @@ def cubic_solver_golden_hex(a, b, c, d):
 
 
 def make_vectors(input_csv="testcases.csv", output_txt="vectors.txt"):
-    with open(input_csv, "r") as f_in, open(output_txt, "w") as f_out:
+    input_path = Path(input_csv)
+    if not input_path.is_absolute():
+        input_path = BASE_DIR / input_path
+
+    output_path = Path(output_txt)
+    if not output_path.is_absolute():
+        output_path = BASE_DIR / output_path
+
+    with open(input_path, "r") as f_in, open(output_path, "w") as f_out:
         reader = csv.DictReader(f_in)
 
         for row in reader:
@@ -194,7 +204,7 @@ def make_vectors(input_csv="testcases.csv", output_txt="vectors.txt"):
                 f"{out['x3_re']} {out['x3_im']}\n"
             )
 
-    print(f"Generated {output_txt}")
+    print(f"Generated {output_path}")
 
 
 if __name__ == "__main__":
