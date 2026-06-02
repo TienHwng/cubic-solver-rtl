@@ -1,12 +1,20 @@
 import math
 import struct
 import csv
+import argparse
 from pathlib import Path
 import numpy as np
 
 
 FP32_NAN = 0x7FC00000
 BASE_DIR = Path(__file__).resolve().parent
+
+
+def resolve_path(path_text):
+    path = Path(path_text)
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path
 
 
 def to_f32(x):
@@ -172,16 +180,14 @@ def cubic_solver_golden_hex(a, b, c, d):
     }
 
 
-def make_vectors(input_csv="testcases.csv", output_txt="vectors.txt"):
-    input_path = Path(input_csv)
-    if not input_path.is_absolute():
-        input_path = BASE_DIR / input_path
+def make_vectors(input_csv="testcases.csv"):
+    input_path = resolve_path(input_csv)
 
-    output_path = Path(output_txt)
-    if not output_path.is_absolute():
-        output_path = BASE_DIR / output_path
+    output_path = input_path.with_name(f"vectors_{input_path.stem}.txt")
 
-    with open(input_path, "r") as f_in, open(output_path, "w") as f_out:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(input_path, "r", newline="") as f_in, open(output_path, "w", newline="") as f_out:
         reader = csv.DictReader(f_in)
 
         for row in reader:
@@ -207,5 +213,46 @@ def make_vectors(input_csv="testcases.csv", output_txt="vectors.txt"):
     print(f"Generated {output_path}")
 
 
+def make_vectors_for_all_csvs():
+    csv_files = sorted(
+        path for path in BASE_DIR.glob("*.csv")
+        if path.is_file()
+    )
+
+    if not csv_files:
+        print(f"No CSV testcase files found in {BASE_DIR}")
+        return
+
+    for csv_file in csv_files:
+        make_vectors(csv_file.name)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate FP32 vector files from testcase CSV files."
+    )
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "-i",
+        "--input",
+        default="testcases.csv",
+        help="CSV testcase file to process. Relative paths are resolved from the script folder.",
+    )
+    group.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        help="Process every CSV testcase file in the script folder.",
+    )
+
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    make_vectors()
+    args = parse_args()
+
+    if args.all:
+        make_vectors_for_all_csvs()
+    else:
+        make_vectors(args.input)
