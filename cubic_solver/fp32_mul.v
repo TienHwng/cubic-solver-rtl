@@ -1,49 +1,38 @@
-module mul24 (
-  input  wire [23:0] a,
-  input  wire [23:0] b,
-  output wire [47:0] p
-);
-
-  wire [47:0] accum [0:23];
-  genvar i;
-
-  generate
-    assign accum[0] = b[0] ? {24'd0, a} : 48'd0;
-
-    for (i = 1; i < 24; i = i + 1) begin : adder_stage
-      
-      wire [47:0] partial_product = b[i] ? ({24'd0, a} << i) : 48'd0;
-
-      adder #(
-        .WIDTH(48)
-      ) u_adder (
-        .a    (accum[i-1]),
-        .b    (partial_product),
-        .cin  (1'b0),
-        .sum  (accum[i]),
-        .cout ()
-      );
-
-    end
-  endgenerate
-
-  assign p = accum[23];
-
-endmodule
-
 module fp32_mul (
-  input  wire [31:0] a,
-  input  wire [31:0] b,
-  output wire [31:0] y
+  input  wire         clk,
+  input  wire         rst_n,
+  input  wire         start,
+  input  wire [31:0]  a,
+  input  wire [31:0]  b,
+  output reg  [31:0]  y,
+  output reg          done
 );
 
-  wire        sa = a[31];
-  wire [7:0]  ea = a[30:23];
-  wire [22:0] fa = a[22:0];
+  localparam ST_IDLE      = 2'd0;
+  localparam ST_START_MUL = 2'd1;
+  localparam ST_MUL       = 2'd2;
+  localparam ST_ROUND     = 2'd3;
+  reg [1:0] state;
 
-  wire        sb = b[31];
-  wire [7:0]  eb = b[30:23];
-  wire [22:0] fb = b[22:0];
+  reg [31:0] a_reg, b_reg;
+
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      a_reg <= 32'd0;
+      b_reg <= 32'd0;
+    end else if (state == ST_IDLE && start) begin
+      a_reg <= a;
+      b_reg <= b;
+    end
+  end
+
+  wire        sa = a_reg[31];
+  wire [7:0]  ea = a_reg[30:23];
+  wire [22:0] fa = a_reg[22:0];
+
+  wire        sb = b_reg[31];
+  wire [7:0]  eb = b_reg[30:23];
+  wire [22:0] fb = b_reg[22:0];
 
   wire s_out = sa ^ sb;
 
@@ -95,13 +84,24 @@ module fp32_mul (
     .cout(exp_unadj_cout)
   );
 
-  wire [47:0] prod;
-  
-  mul24 multiply (.a(ma), .b(mb), .p(prod));
+  reg         mul_start;
+  wire        mul_done;
+  wire [47:0] prod_wire;
+  reg  [47:0] prod_reg;
 
-  wire need_shift_r1 = prod[47];
+  mul24 multiply (
+    .clk  (clk),
+    .rst_n(rst_n),
+    .start(mul_start),
+    .a    (ma),
+    .b    (mb),
+    .p    (prod_wire),
+    .done (mul_done)
+  );
 
-  wire [47:0] norm0 = need_shift_r1 ? (prod >> 1) : prod;
+  wire need_shift_r1 = prod_reg[47];
+
+  wire [47:0] norm0 = need_shift_r1 ? (prod_reg >> 1) : prod_reg;
 
   wire [31:0] exp_norm;
   wire        exp_norm_cout;
@@ -203,6 +203,129 @@ module fp32_mul (
     end
   end
 
-  assign y = y_r;
+  wire is_special = a_is_nan | b_is_nan | 
+                    ((a_is_inf && b_is_zero) || (b_is_inf && a_is_zero)) | 
+                    a_is_inf | b_is_inf | a_is_zero | b_is_zero;
 
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      state     <= ST_IDLE;
+      mul_start <= 1'b0;
+      prod_reg  <= 48'd0;
+      y         <= 32'd0;
+      done      <= 1'b0;
+    end else begin
+      case (state)
+        ST_IDLE: begin
+          done <= 1'b0;
+          if (start) begin
+            state <= ST_START_MUL;
+          end
+        end
+        
+        ST_START_MUL: begin
+          if (is_special) begin
+            state <= ST_ROUND;
+          end else begin
+            mul_start <= 1'b1;
+            state     <= ST_MUL;
+          end
+        end
+        
+        ST_MUL: begin
+          mul_start <= 1'b0;
+          if (mul_done) begin
+            prod_reg <= prod_wire;
+            state    <= ST_ROUND;
+          end
+        end
+        
+        ST_ROUND: begin
+          y     <= y_r;
+          done  <= 1'b1;
+          state <= ST_IDLE;
+        end
+        
+        default: state <= ST_IDLE;
+      endcase
+    end
+  end
+
+endmodule
+
+module mul24 (
+  input  wire         clk,
+  input  wire         rst_n,
+  input  wire         start,
+  input  wire [23:0]  a,
+  input  wire [23:0]  b,
+  output reg  [47:0]  p,
+  output reg          done
+);
+  localparam IDLE = 1'b0;
+  localparam CALC = 1'b1;
+  reg state;
+
+  reg [47:0] accum;
+  reg [47:0] a_ext;
+  reg [23:0] b_reg;
+  reg [4:0]  count;
+
+  wire [47:0] sum_wire;
+  
+  adder #(.WIDTH(48)) u_mul_add (
+    .a   (accum),
+    .b   (a_ext),
+    .cin (1'b0),
+    .sum (sum_wire),
+    .cout()
+  );
+
+  wire [4:0] next_count;
+  adder #(.WIDTH(5)) u_count_inc (
+    .a   (count),
+    .b   (5'd1),
+    .cin (1'b0),
+    .sum (next_count),
+    .cout()
+  );
+
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      state <= IDLE;
+      accum <= 48'd0;
+      a_ext <= 48'd0;
+      b_reg <= 24'd0;
+      count <= 5'd0;
+      p     <= 48'd0;
+      done  <= 1'b0;
+    end else begin
+      case (state)
+        IDLE: begin
+          done <= 1'b0;
+          if (start) begin
+            accum <= 48'd0;
+            a_ext <= {24'd0, a};
+            b_reg <= b;
+            count <= 5'd0;
+            state <= CALC;
+          end
+        end
+        
+        CALC: begin
+          accum <= b_reg[0] ? sum_wire : accum;
+          a_ext <= a_ext << 1;
+          b_reg <= b_reg >> 1;
+          
+          if (count == 5'd23) begin
+            p     <= b_reg[0] ? sum_wire : accum;
+            done  <= 1'b1;
+            state <= IDLE;
+          end else begin
+            count <= next_count;
+          end
+        end
+      endcase
+    end
+  end
 endmodule

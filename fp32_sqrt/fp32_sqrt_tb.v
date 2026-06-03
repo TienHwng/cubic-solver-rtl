@@ -1,47 +1,93 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 05/31/2026 12:34:33 AM
-// Design Name: 
-// Module Name: fp32_sqrt_tb
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
-
 
 module fp32_sqrt_tb;
 
+reg clk;
+reg rst_n;
+reg start;
 reg [31:0] in;
 wire [31:0] out;
+wire done;
 
-fp32_sqrt dut (.x_in(in), .sqrt_out(out));
+fp32_sqrt dut (
+    .clk(clk),
+    .rst_n(rst_n),
+    .start(start),
+    .x_in(in),
+    .sqrt_out(out),
+    .done(done)
+);
 
 initial begin
+    clk = 0;
+    forever #5 clk = ~clk;
+end
+
+initial begin
+    rst_n = 0;
+    start = 0;
     in = 32'h00000000;
-    #5;
+    
+    #15;
+    rst_n = 1;
+    #10;
+
+    @(posedge clk);
+    in = 32'h00000000;
+    start = 1;
+    @(posedge clk);
+    start = 0;
+    @(posedge done);
+
+    #10;
+    @(posedge clk);
     in = 32'h3f800000;
-    #5;
+    start = 1;
+    @(posedge clk);
+    start = 0;
+    @(posedge done);
+
+    #10;
+    @(posedge clk);
     in = 32'h40800000;
-    #5;
+    start = 1;
+    @(posedge clk);
+    start = 0;
+    @(posedge done);
+
+    #10;
+    @(posedge clk);
     in = 32'h41100000;
-    #5;
+    start = 1;
+    @(posedge clk);
+    start = 0;
+    @(posedge done);
+
+    #10;
+    @(posedge clk);
     in = 32'h40000000;
-    #5;
+    start = 1;
+    @(posedge clk);
+    start = 0;
+    @(posedge done);
+
+    #10;
+    @(posedge clk);
     in = 32'h40400000;
-    #5;
+    start = 1;
+    @(posedge clk);
+    start = 0;
+    @(posedge done);
+
+    #10;
+    @(posedge clk);
     in = 32'h41200000;
-    #5;
+    start = 1;
+    @(posedge clk);
+    start = 0;
+    @(posedge done);
+
+    #20;
     $finish;
 end
 
