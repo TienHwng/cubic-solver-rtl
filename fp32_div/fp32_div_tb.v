@@ -1,80 +1,73 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 05/30/2026 05:39:42 PM
-// Design Name: 
-// Module Name: fp32_div_tb
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
-
 
 module fp32_div_tb;
 
-reg [31:0] a;
-reg [31:0] b;
-wire [31:0] result;
+  reg         clk;
+  reg         rst_n;
+  reg         start;
+  reg  [31:0] a;
+  reg  [31:0] b;
+  wire [31:0] result;
+  wire         done;
 
-fp32_div dut (.a( a), .b( b), .y(result));
+  fp32_div dut (
+    .clk(clk),
+    .rst_n(rst_n),
+    .start(start),
+    .a(a),
+    .b(b),
+    .y(result),
+    .done(done)
+  );
 
-initial begin
-    a = 32'hC3038800;
-    b = 32'hC1740000;
-    #5;
-    a = 32'hC1740000;
-    b = 32'hC3038800;
-    #5;
-    a = 32'h40400000;
-    b = 32'h40000000;
-    #5;
-    a = 32'h40000000;
-    b = 32'h40400000;
-    #5;
-    a = 32'h40A66666;
-    b = 32'h40F33333;
-    #5;
-    a = 32'h40F33333;
-    b = 32'h40A66666;
-    #5;
+  initial begin
+    clk = 0;
+    forever #5 clk = ~clk;
+  end
+
+  task run_test(input [31:0] test_a, input [31:0] test_b);
+  begin
+    @(posedge clk);
+    a     = test_a;
+    b     = test_b;
+    start = 1'b1;   
     
+    while (!done) begin
+      @(posedge clk);
+      start = 1'b0;
+    end
     
-    a = 32'h00000000;
-    b = 32'h00000000;
-    #5;
-    a = 32'h7f800000;
-    b = 32'h7f800000;
-    #5;
-    a = 32'h40000000;
-    b = 32'h00000000;
-    #5;
-    a = 32'h00000000;
-    b = 32'h40000000;
-    #5;
-    a = 32'h7f800000;
-    b = 32'h40000000;
-    #5;
-    a = 32'h40000000;
-    b = 32'h40000000;
-    #5;
-    a = 32'h3F800000;
-    b = 32'h40400000;
-    #5;
-    a = 32'h40400000;
-    b = 32'h3F800000;
-    #5;
+    #5; 
+  end
+  endtask
+
+  initial begin
+    rst_n = 1'b0;
+    start = 1'b0;
+    a     = 32'd0;
+    b     = 32'd0;
+    
+    #20;
+    rst_n = 1'b1;
+    #10;
+
+    run_test(32'hC3038800, 32'hC1740000);
+    run_test(32'hC1740000, 32'hC3038800);
+    run_test(32'h40400000, 32'h40000000);
+    run_test(32'h40000000, 32'h40400000);
+    run_test(32'h40A66666, 32'h40F33333);
+    run_test(32'h40F33333, 32'h40A66666);
+    
+    run_test(32'h00000000, 32'h00000000);
+    run_test(32'h7f800000, 32'h7f800000);
+    run_test(32'h40000000, 32'h00000000);
+    run_test(32'h00000000, 32'h40000000);
+    run_test(32'h7f800000, 32'h40000000);
+    run_test(32'h40000000, 32'h40000000);
+    run_test(32'h3F800000, 32'h40400000);
+    run_test(32'h40400000, 32'h3F800000);
     
     $finish;
-end
+  end
 
 endmodule
